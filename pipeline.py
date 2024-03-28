@@ -1,23 +1,26 @@
-from langdetect import detect
-import re
-from tqdm.auto import tqdm
-import pickle
-import pandas as pd
-import unicodedata
-import tmtoolkit
-import numpy as np
-from gensim.parsing.preprocessing import strip_punctuation
-from TGDataset import db_utilities
-import spacy
+import warnings
+with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    from langdetect import detect
+    import re
+    from tqdm.auto import tqdm
+    import pickle
+    import pandas as pd
+    import unicodedata
+    import tmtoolkit
+    import numpy as np
+    from gensim.parsing.preprocessing import strip_punctuation
+    from TGDataset import db_utilities
+    import spacy
 
 
-from sklearn.decomposition import LatentDirichletAllocation
-from sklearn.feature_extraction.text import CountVectorizer
-from nltk.corpus import stopwords
-from multiprocessing import Pool
-from transformers import BertTokenizer, BertModel
-import torch
-import os
+    from sklearn.decomposition import LatentDirichletAllocation
+    from sklearn.feature_extraction.text import CountVectorizer
+    from nltk.corpus import stopwords
+    from multiprocessing import Pool
+    from transformers import BertTokenizer, BertModel
+    import torch
+    import os
 
 def open_pickle(filename):
     with open ('/media/teun/Hard Driver/TxMM/preprocessed_docs/'+filename, 'rb') as fp:
@@ -34,39 +37,25 @@ def save_as_pickle(text_list, outfile_name):
 
 def get_corpus(channel):
     _id = channel['_id']
-    discarded_messages = 0
     messages = channel['text_messages']
-    len_messages = len(messages)
     messages = [messages[key]['message'] for key in messages if len(messages[key]['message']) > 25]
-    discarded_messages += len_messages - len(messages)
     ok_messages = []
         
     for message in messages:
         if len(ok_messages) >= 100:
             break
-        english = False
-        if english == True:
-            try:
-                if detect(message)=='en': ok_messages.append(message)
-                else: discarded_messages +=1
-            except:
-                pass
         else:
             ok_messages.append(message)
-        
-    single_corpus = ' '.join(ok_messages)
 
-    return (single_corpus, _id, discarded_messages, ok_messages)
+    return (ok_messages, _id)
 
 def bert_preprocess(channel, batch_size=2):
     batches = split_list(channel, batch_size)
-    # tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
-    # model = BertModel.from_pretrained("bert-base-multilingual-cased")
-    # print('calc embeddings')
     embeddings = []
     for batch in batches:
-        # print(batch)
+        # tokenize 
         messages = tokenizer(batch, return_tensors='pt', max_length=512, truncation=True, padding=True)
+        # compute embedding
         embedding = model(**messages)['pooler_output'].detach()
         for e in embedding:
             embeddings.append(e.numpy())
@@ -75,63 +64,44 @@ def bert_preprocess(channel, batch_size=2):
     return mean
 
 def preprocessing_bert(portion_size=1000, n_pool=1):
-    # print('Loading Bert')
-    # print('Getting channels')
+    # load list of all channels
     df = pd.read_csv('TGDataset/labeled_data/channel_to_language_mapping.csv', sep='\t')
 
-    done_prev = open_pickle(f'processed_channels')
-    done_channels = done_prev.keys()
-    df = df[~df['ch_id'].isin(done_channels)]
-    done_numbers = max(done_prev.values())
-    iteration = done_numbers+1
+    # load list of channels in current database
+    channels_in_db = db_utilities.get_channel_ids(db_name='Telegram_test')
 
-    english = False
-    if english == True:
-        df_ = df[df['language']=='en']
-        channels = list(df_['ch_id'])
+    # load previously preprocessed channels
+    done_prev = open_pickle(f'test/done_ids')
+
+    # remove done channels and channels not in database
+    df = df[~df['ch_id'].isin(done_prev)]
+    df = df[df['ch_id'].isin(channels_in_db)]
+
     channels = list(df['ch_id'])
-    portions = split_list(channels, portion_size)
-    # print(len(channels))
-
-    done = done_prev
-
-    # print('Starting preprocessing')
+    portions = split_list(channels, portion_size) # prepare portions
+    
+    done = {}
     for i, portion in tqdm(enumerate(portions), total=len(portions)):
-        print(len(portion))
-        # print('Getting corpus')
-        # print('Getting channels')
+        # get channel content
         channels = db_utilities.get_channels_by_ids(portion, db_name='Telegram_test')
-        # print('Getting messages')
-        corpus = []
-        all_messages = []
-        id_list = []
-        discarded_messages = 0  
-        with Pool(n_pool) as pool:
-            for single_corpus, _id, s_discarded_messages, ok_messages in pool.map(get_corpus, channels):
-                corpus.append(single_corpus)
-                id_list.append(_id)
-                all_messages.append(ok_messages)
-                discarded_messages += s_discarded_messages
-
-        save_as_pickle(id_list, f'ids_list_topic_modeling/n_gram_ids_list_topic_modeling_{i+iteration}')
-        save_as_pickle(discarded_messages, f'discarded_messages_topic_modeling/n_gram_discarded_messages_topic_modeling_{i+iteration}')
-        save_as_pickle(corpus, f'corpus/n_gram_corpus_{i+iteration}')
-        save_as_pickle(all_messages, f'messages_per_channel/messages_{i+iteration}')
-        # print(len(all_messages))
-        # print('Calculating embeddings')
+        if len(channels) == 0:
+            continue
+        messages = []
         embeddings = []
-        for channel_messages in tqdm(all_messages):
-            channel_embedding = bert_preprocess(channel_messages)
-            embeddings.append(channel_embedding)
-        
-        save_as_pickle(embeddings, f'texts_bert/texts_topic_modeling_{i+iteration}')
+        ids = []
 
-        for channel in portion:
-            done[channel] = i
+        for channel in tqdm(channels):
+            ok_messages, _id = get_corpus(channel) # get messages
+            embedding = bert_preprocess(ok_messages) # compute embeddings
 
-        save_as_pickle(done, f'processed_channels')
+            messages.append(ok_messages)
+            embeddings.append(embedding)
+            ids.append(_id)
+            done[_id] = 1
+        portiondict = {'id': ids, 'embeddings': embeddings, 'messages': messages}
+        save_as_pickle(portiondict, f'test/run5_{i}') # save embeddings and messages to a file
 
 if __name__ == '__main__':
     tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
     model = BertModel.from_pretrained("bert-base-multilingual-cased")
-    preprocessing_bert(1000, 1)
+    preprocessing_bert(100, 1)
