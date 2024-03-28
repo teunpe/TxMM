@@ -1,23 +1,26 @@
-from langdetect import detect
-import re
-from tqdm.auto import tqdm
-import pickle
-import pandas as pd
-import unicodedata
-import tmtoolkit
-import numpy as np
-from gensim.parsing.preprocessing import strip_punctuation
-from TGDataset import db_utilities
-import spacy
+import warnings
+with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    from langdetect import detect
+    import re
+    from tqdm.auto import tqdm
+    import pickle
+    import pandas as pd
+    import unicodedata
+    import tmtoolkit
+    import numpy as np
+    from gensim.parsing.preprocessing import strip_punctuation
+    from TGDataset import db_utilities
+    import spacy
 
 
-from sklearn.decomposition import LatentDirichletAllocation
-from sklearn.feature_extraction.text import CountVectorizer
-from nltk.corpus import stopwords
-from multiprocessing import Pool
-from transformers import BertTokenizer, BertModel
-import torch
-import os
+    from sklearn.decomposition import LatentDirichletAllocation
+    from sklearn.feature_extraction.text import CountVectorizer
+    from nltk.corpus import stopwords
+    from multiprocessing import Pool
+    from transformers import BertTokenizer, BertModel
+    import torch
+    import os
 
 def open_pickle(filename):
     with open ('/media/teun/Hard Driver/TxMM/preprocessed_docs/'+filename, 'rb') as fp:
@@ -67,11 +70,17 @@ def preprocessing_bert(portion_size=1000, n_pool=1):
     # print('Getting channels')
     df = pd.read_csv('TGDataset/labeled_data/channel_to_language_mapping.csv', sep='\t')
 
-    # done_prev = open_pickle(f'processed_channels')
+    channels_in_db = db_utilities.get_channel_ids(db_name='Telegram_test')
+
+    done_prev = open_pickle(f'test/done_ids')
+    # print(len(df), len(done_prev))
     # done_channels = done_prev.keys()
-    # df = df[~df['ch_id'].isin(done_channels)]
+    df = df[~df['ch_id'].isin(done_prev)]
     # done_numbers = max(done_prev.values())
     # iteration = done_numbers+1
+    print(len(df))
+    df = df[df['ch_id'].isin(channels_in_db)]
+    print(len(df))
 
     # english = False
     # if english == True:
@@ -79,17 +88,18 @@ def preprocessing_bert(portion_size=1000, n_pool=1):
     #     channels = list(df_['ch_id'])
     channels = list(df['ch_id'])
     portions = split_list(channels, portion_size)
-    # # print(len(channels))
+    
     done = {}
     # done = done_prev
-
     # print('Starting preprocessing')
     for i, portion in tqdm(enumerate(portions), total=len(portions)):
         channels = db_utilities.get_channels_by_ids(portion, db_name='Telegram_test')
+        if len(channels) == 0:
+            continue
         messages = []
         embeddings = []
         ids = []
-        discarded_messages = 0  
+        # discarded_messages = 0  
         # print(channels)
 
         for channel in tqdm(channels):
@@ -101,9 +111,9 @@ def preprocessing_bert(portion_size=1000, n_pool=1):
             ids.append(_id)
             done[_id] = 1
         portiondict = {'id': ids, 'embeddings': embeddings, 'messages': messages}
-        save_as_pickle(portiondict, f'test/{i}')
+        save_as_pickle(portiondict, f'test/run5_{i}')
 
 if __name__ == '__main__':
     tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
     model = BertModel.from_pretrained("bert-base-multilingual-cased")
-    preprocessing_bert(1000, 1)
+    preprocessing_bert(100, 1)

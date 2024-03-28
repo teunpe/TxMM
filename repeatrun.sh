@@ -4,35 +4,16 @@ source activate /home/teun/TxMM/.conda
 
 echo "First run"
 python3 newpipeline.py
-break
 echo "Starting new run"
-python3 pipeline.py
+python3 newpipeline.py
 echo "Starting new run"
-python3 pipeline.py
+python3 newpipeline.py
 echo "Starting new run"
-python3 pipeline.py
+python3 newpipeline.py
 echo "Starting new run"
-python3 pipeline.py
+python3 newpipeline.py
 echo "Starting new run"
-python3 pipeline.py
+python3 newpipeline.py
 echo "Starting new run"
-python3 pipeline.py
-echo "Starting new run"
-python3 pipeline.py
-echo "Starting new run"
-python3 pipeline.py
-echo "Starting new run"
-python3 pipeline.py
-echo "Starting new run"
-python3 pipeline.py
-echo "Starting new run"
-python3 pipeline.py
-echo "Starting new run"
-python3 pipeline.py
-echo "Starting new run"
-python3 pipeline.py
-echo "Starting new run"
-python3 pipeline.py
-echo "Starting new run"
-python3 pipeline.py
+python3 newpipeline.py
 
