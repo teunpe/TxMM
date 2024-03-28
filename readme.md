@@ -1,2 +1,2 @@
-The data is prepared according to the Readme in the TGDataset folder. Following that, preprocessing is performed using pipeline.py.
+The data is prepared according to the Readme in the TGDataset folder. Following that, preprocessing is performed using 'pipeline.py'.
 After preprocessing the data, clustering and analysis is performed in 'topic_modeling_BERT.ipynb'.
